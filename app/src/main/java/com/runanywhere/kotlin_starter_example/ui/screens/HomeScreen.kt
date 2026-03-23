@@ -29,6 +29,7 @@ fun HomeScreen(
     onNavigateToVoicePipeline: () -> Unit,
     onNavigateToToolCalling: () -> Unit,
     onNavigateToVision: () -> Unit,
+    onNavigateToDebugger: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -51,23 +52,23 @@ fun HomeScreen(
                 .padding(24.dp)
         ) {
             Spacer(modifier = Modifier.height(20.dp))
-            
+
             // Header
             Header()
-            
+
             Spacer(modifier = Modifier.height(40.dp))
-            
+
             // Privacy info
             PrivacyInfoCard()
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
-            // Feature grid
+
+            // Feature grid — height increased by 100dp to fit the new card
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.height(560.dp)
+                modifier = Modifier.height(660.dp)
             ) {
                 item {
                     FeatureCard(
@@ -78,7 +79,7 @@ fun HomeScreen(
                         onClick = onNavigateToChat
                     )
                 }
-                
+
                 item {
                     FeatureCard(
                         title = "Speech",
@@ -88,7 +89,7 @@ fun HomeScreen(
                         onClick = onNavigateToSTT
                     )
                 }
-                
+
                 item {
                     FeatureCard(
                         title = "Voice",
@@ -98,7 +99,7 @@ fun HomeScreen(
                         onClick = onNavigateToTTS
                     )
                 }
-                
+
                 item {
                     FeatureCard(
                         title = "Pipeline",
@@ -108,7 +109,7 @@ fun HomeScreen(
                         onClick = onNavigateToVoicePipeline
                     )
                 }
-                
+
                 item {
                     FeatureCard(
                         title = "Tools",
@@ -118,7 +119,7 @@ fun HomeScreen(
                         onClick = onNavigateToToolCalling
                     )
                 }
-                
+
                 item {
                     FeatureCard(
                         title = "Vision",
@@ -128,13 +129,23 @@ fun HomeScreen(
                         onClick = onNavigateToVision
                     )
                 }
+
+                item {
+                    FeatureCard(
+                        title = "Code Finalizer",
+                        subtitle = "Debug · Analyze · AI Fix",   // ← uses subtitle, not description
+                        icon = Icons.Default.BugReport,
+                        gradientColors = listOf(Color(0xFF1E88E5), Color(0xFF1565C0)),
+                        onClick = onNavigateToDebugger
+                    )
+                }
             }
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
+
             // Model info
             ModelInfoSection()
-            
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -145,7 +156,6 @@ private fun Header() {
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Icon
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -164,10 +174,9 @@ private fun Header() {
                 modifier = Modifier.size(32.dp)
             )
         }
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
-        // Title
+
         Column {
             Text(
                 text = "RunAnywhere",
@@ -204,9 +213,9 @@ private fun PrivacyInfoCard() {
                 tint = AccentCyan.copy(alpha = 0.8f),
                 modifier = Modifier.size(28.dp)
             )
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             Column {
                 Text(
                     text = "Privacy-First On-Device AI",
@@ -290,7 +299,7 @@ private fun ModelInfoRow(
                 color = TextPrimary
             )
         }
-        
+
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
