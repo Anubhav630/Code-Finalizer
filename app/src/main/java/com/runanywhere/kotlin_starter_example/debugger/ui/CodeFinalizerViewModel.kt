@@ -1,185 +1,16 @@
-//package com.runanywhere.kotlin_starter_example.debugger.ui
-//
-//import android.content.Context
-//import android.graphics.Bitmap
-//import android.net.Uri
-//import androidx.lifecycle.ViewModel
-//import androidx.lifecycle.viewModelScope
-//import com.runanywhere.kotlin_starter_example.debugger.analysis.AnalysisReport
-//import com.runanywhere.kotlin_starter_example.debugger.analysis.DebugError
-//import com.runanywhere.kotlin_starter_example.debugger.input.CodeFile
-//import com.runanywhere.kotlin_starter_example.debugger.input.CodeInputProcessor
-//import com.runanywhere.kotlin_starter_example.debugger.input.InputResult
-//import com.runanywhere.kotlin_starter_example.debugger.input.SupportedLanguage
-//import com.runanywhere.kotlin_starter_example.debugger.llm.CodeFinalizerPipeline
-//import com.runanywhere.kotlin_starter_example.debugger.llm.FullDebugSession
-//import com.runanywhere.kotlin_starter_example.debugger.llm.LLMSolutionGenerator
-//import com.runanywhere.kotlin_starter_example.debugger.quality.QualityReport
-//import kotlinx.coroutines.flow.MutableStateFlow
-//import kotlinx.coroutines.flow.StateFlow
-//import kotlinx.coroutines.flow.asStateFlow
-//import kotlinx.coroutines.flow.update
-//import kotlinx.coroutines.launch
-//
-//// ─────────────────────────────────────────────
-////  UI State
-//// ─────────────────────────────────────────────
-//
-//sealed class DebugPhase {
-//    object Idle : DebugPhase()
-//    object ProcessingInput : DebugPhase()     // Phase 1
-//    object AnalyzingCode : DebugPhase()       // Phase 2
-//    object EvaluatingQuality : DebugPhase()   // Phase 3
-//    object GeneratingSolution : DebugPhase()  // LLM
-//    data class Complete(val sessions: List<FullDebugSession>) : DebugPhase()
-//    data class Error(val message: String) : DebugPhase()
-//}
-//
-//data class CodeFinalizerState(
-//    val phase: DebugPhase = DebugPhase.Idle,
-//    val loadedFiles: List<CodeFile> = emptyList(),
-//    val selectedFileIndex: Int = 0,
-//    val currentSession: FullDebugSession? = null,
-//    val allSessions: List<FullDebugSession> = emptyList(),
-//    val streamingOutput: String = "",
-//    val isStreaming: Boolean = false,
-//    val userQuestion: String = ""
-//)
-//
-//// ─────────────────────────────────────────────
-////  ViewModel
-//// ─────────────────────────────────────────────
-//
-//class CodeFinalizerViewModel : ViewModel() {
-//
-//    private val _state = MutableStateFlow(CodeFinalizerState())
-//    val state: StateFlow<CodeFinalizerState> = _state.asStateFlow()
-//
-//    private val pipeline = CodeFinalizerPipeline()
-//    private val llmGenerator = LLMSolutionGenerator()
-//
-//    // ── Input Handlers ────────────────────────────────────────────────────
-//
-//    fun processZipFile(context: Context, uri: Uri) {
-//        viewModelScope.launch {
-//            _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
-//            val processor = CodeInputProcessor(context)
-//            when (val result = processor.processZip(uri)) {
-//                is InputResult.Success -> onFilesLoaded(result.files)
-//                is InputResult.Error -> _state.update {
-//                    it.copy(phase = DebugPhase.Error(result.message))
-//                }
-//            }
-//        }
-//    }
-//
-//    fun processImage(context: Context, bitmap: Bitmap) {
-//        viewModelScope.launch {
-//            _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
-//            val processor = CodeInputProcessor(context)
-//            when (val result = processor.processImage(bitmap)) {
-//                is InputResult.Success -> onFilesLoaded(result.files)
-//                is InputResult.Error -> _state.update {
-//                    it.copy(phase = DebugPhase.Error(result.message))
-//                }
-//            }
-//        }
-//    }
-//
-//    fun processTextInput(context: Context, code: String, language: SupportedLanguage? = null) {
-//        viewModelScope.launch {
-//            _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
-//            val processor = CodeInputProcessor(context)
-//            when (val result = processor.processText(code, language)) {
-//                is InputResult.Success -> onFilesLoaded(result.files)
-//                is InputResult.Error -> _state.update {
-//                    it.copy(phase = DebugPhase.Error(result.message))
-//                }
-//            }
-//        }
-//    }
-//
-//    // ── Pipeline Execution ───────────────────────────────────────────────
-//
-//    private suspend fun onFilesLoaded(files: List<CodeFile>) {
-//        _state.update { it.copy(loadedFiles = files) }
-//
-//        // Phase 2 — Analysis
-//        _state.update { it.copy(phase = DebugPhase.AnalyzingCode) }
-//
-//        // Phase 3 — Quality
-//        _state.update { it.copy(phase = DebugPhase.EvaluatingQuality) }
-//
-//        // Run full pipeline on all files
-//        _state.update { it.copy(phase = DebugPhase.GeneratingSolution) }
-//        val sessions = pipeline.runOnProject(files)
-//
-//        // Run LLM on the worst file (lowest quality score)
-//        val worstSession = sessions.minByOrNull { it.qualityReport.overallScore }
-//        val finalSessions = if (worstSession != null) {
-//            val fullSession = pipeline.runFullPipeline(worstSession.codeFile, generateLLMSolution = true)
-//            sessions.map { if (it.codeFile.fileName == fullSession.codeFile.fileName) fullSession else it }
-//        } else sessions
-//
-//        _state.update {
-//            it.copy(
-//                phase = DebugPhase.Complete(finalSessions),
-//                allSessions = finalSessions,
-//                currentSession = finalSessions.firstOrNull()
-//            )
-//        }
-//    }
-//
-//    fun runPipelineOnFile(index: Int) {
-//        val file = _state.value.loadedFiles.getOrNull(index) ?: return
-//        viewModelScope.launch {
-//            _state.update { it.copy(phase = DebugPhase.AnalyzingCode, selectedFileIndex = index) }
-//            val session = pipeline.runFullPipeline(file, generateLLMSolution = true)
-//            _state.update { state ->
-//                val updated = state.allSessions.toMutableList()
-//                val existingIdx = updated.indexOfFirst { it.codeFile.fileName == file.fileName }
-//                if (existingIdx >= 0) updated[existingIdx] = session else updated.add(session)
-//                state.copy(
-//                    phase = DebugPhase.Complete(updated),
-//                    allSessions = updated,
-//                    currentSession = session
-//                )
-//            }
-//        }
-//    }
-//
-//    fun askQuestion(question: String) {
-//        val file = _state.value.currentSession?.codeFile ?: return
-//        viewModelScope.launch {
-//            _state.update { it.copy(isStreaming = true, streamingOutput = "", userQuestion = question) }
-//            llmGenerator.streamDebugSolution(
-//                file,
-//                _state.value.currentSession!!.analysisReport
-//            ).collect { chunk ->
-//                _state.update { it.copy(streamingOutput = it.streamingOutput + chunk) }
-//            }
-//            _state.update { it.copy(isStreaming = false) }
-//        }
-//    }
-//
-//    fun selectFile(index: Int) {
-//        val session = _state.value.allSessions.getOrNull(index)
-//        _state.update { it.copy(selectedFileIndex = index, currentSession = session) }
-//    }
-//
-//    fun reset() {
-//        _state.update { CodeFinalizerState() }
-//    }
-//}
 package com.runanywhere.kotlin_starter_example.debugger.ui
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.runanywhere.kotlin_starter_example.debugger.analysis.AnalysisReport
 import com.runanywhere.kotlin_starter_example.debugger.analysis.CoreDebugEngine
+import com.runanywhere.kotlin_starter_example.debugger.analysis.ProjectAnalyzer
 import com.runanywhere.kotlin_starter_example.debugger.input.CodeFile
 import com.runanywhere.kotlin_starter_example.debugger.input.CodeInputProcessor
 import com.runanywhere.kotlin_starter_example.debugger.input.InputResult
@@ -196,11 +27,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.runanywhere.kotlin_starter_example.debugger.llm.LLMSolutionGenerator
+import com.runanywhere.kotlin_starter_example.debugger.services.VisionService
 
 data class DebugChatMessage(
     val text: String,
     val isUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val showImageSourceDialog: Boolean = false
+
+
 )
 
 sealed class DebugPhase {
@@ -220,16 +56,37 @@ data class CodeFinalizerState(
     val qualityReports: Map<String, QualityReport> = emptyMap(),
     val chatMessages: List<DebugChatMessage> = emptyList(),
     val isGeneratingChat: Boolean = false,
-    val chatInput: String = ""
+    val chatInput: String = "",
+    val aiSolutions: Map<String, String> = emptyMap(),
+    val aiDiagnosis: String? = null,
+    val extractedPreview: String? = null,
+    val showImageSourceDialog: Boolean = false
 )
 
 class CodeFinalizerViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(CodeFinalizerState())
     val state: StateFlow<CodeFinalizerState> = _state.asStateFlow()
-
     private val debugEngine = CoreDebugEngine()
     private val qualityEvaluator = QualityEvaluator()
+    private val llmSolutionGenerator = LLMSolutionGenerator()
+    private val llmGenerator = LLMSolutionGenerator()
+
+    private var pendingImageFiles: List<CodeFile>? = null
+    private var pendingModelService: ModelService? = null
+
+    lateinit var visionService: VisionService
+
+    fun openImageSourceDialog() {
+        _state.update { it.copy(showImageSourceDialog = true) }
+    }
+
+    fun closeImageSourceDialog() {
+        _state.update { it.copy(showImageSourceDialog = false) }
+    }
+
+
+
 
     val selectedFile: CodeFile?
         get() = _state.value.loadedFiles.getOrNull(_state.value.selectedFileIndex)
@@ -240,47 +97,170 @@ class CodeFinalizerViewModel : ViewModel() {
     val selectedQuality: QualityReport?
         get() = selectedFile?.let { _state.value.qualityReports[it.fileName] }
 
-    fun processZip(context: Context, uri: Uri) {
+    fun processZip(
+        context: Context,
+        uri: Uri,
+        modelService: ModelService
+    ) {
         viewModelScope.launch {
             _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
             val processor = CodeInputProcessor(context)
             when (val result = processor.processZip(uri)) {
-                is InputResult.Success -> runAnalysis(result.files)
+                is InputResult.Success -> runAnalysis(result.files, modelService)
                 is InputResult.Error -> _state.update { it.copy(phase = DebugPhase.Error(result.message)) }
             }
         }
     }
 
-    fun processImage(context: Context, bitmap: Bitmap) {
+    fun attachContext(context: Context, modelService: ModelService) {
+        visionService = VisionService(context, modelService)
+    }
+
+    fun processImage(
+        context: Context,
+        uri: Uri,
+        modelService: ModelService
+    ) {
         viewModelScope.launch {
+
             _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
-            val processor = CodeInputProcessor(context)
-            when (val result = processor.processImage(bitmap)) {
-                is InputResult.Success -> runAnalysis(result.files)
-                is InputResult.Error -> _state.update { it.copy(phase = DebugPhase.Error(result.message)) }
+
+            try {
+                val bitmap =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        ImageDecoder.decodeBitmap(
+                            ImageDecoder.createSource(
+                                context.contentResolver,
+                                uri
+                            )
+                        )
+                    } else {
+                        MediaStore.Images.Media.getBitmap(
+                            context.contentResolver,
+                            uri
+                        )
+                    }
+
+                val processor = CodeInputProcessor(context)
+
+                when (val result = processor.processImage(bitmap)) {
+                    is InputResult.Success -> runAnalysis(result.files, modelService)
+                    is InputResult.Error -> _state.update {
+                        it.copy(phase = DebugPhase.Error(result.message))
+                    }
+                }
+
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        phase = DebugPhase.Error(
+                            "Failed to read image: ${e.message}"
+                        )
+                    )
+                }
             }
         }
     }
-
-    fun processText(context: Context, code: String, language: SupportedLanguage? = null) {
+    fun processText(
+        context: Context,
+        code: String,
+        modelService: ModelService,
+        language: SupportedLanguage? = null
+    ) {
         viewModelScope.launch {
+
             _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
+
             val processor = CodeInputProcessor(context)
+
             when (val result = processor.processText(code, language)) {
-                is InputResult.Success -> runAnalysis(result.files)
-                is InputResult.Error -> _state.update { it.copy(phase = DebugPhase.Error(result.message)) }
+                is InputResult.Success -> runAnalysis(result.files, modelService)
+                is InputResult.Error -> _state.update {
+                    it.copy(phase = DebugPhase.Error(result.message))
+                }
             }
         }
     }
 
-    private suspend fun runAnalysis(files: List<CodeFile>) {
+    private suspend fun runAnalysis(
+        files: List<CodeFile>,
+        modelService: ModelService
+    ){
+
+        if (!modelService.isLLMLoaded) {
+            modelService.downloadAndLoadLLM()
+        }
+
         _state.update { it.copy(phase = DebugPhase.AnalyzingCode, loadedFiles = files) }
+
         val analyses = mutableMapOf<String, AnalysisReport>()
-        files.forEach { file -> analyses[file.fileName] = debugEngine.analyzeFile(file) }
-        _state.update { it.copy(phase = DebugPhase.EvaluatingQuality, analysisReports = analyses) }
+
+        files.forEach { file ->
+            analyses[file.fileName] = debugEngine.analyzeFile(file)
+        }
+
+        _state.update {
+            it.copy(
+                phase = DebugPhase.EvaluatingQuality,
+                analysisReports = analyses
+            )
+        }
+
         val qualities = mutableMapOf<String, QualityReport>()
-        files.forEach { file -> qualities[file.fileName] = qualityEvaluator.evaluateFile(file) }
-        _state.update { it.copy(phase = DebugPhase.Complete, qualityReports = qualities) }
+
+        files.forEach { file ->
+            qualities[file.fileName] = qualityEvaluator.evaluateFile(file)
+        }
+
+        // ⭐ Project intelligence (already correct)
+        val projectInsights = ProjectAnalyzer.analyze(files)
+
+        // ⭐ Generate AI diagnosis from worst file
+        val worstFileName = projectInsights.worstFile
+        val worstFile = files.find { it.fileName == worstFileName }
+
+        var aiText: String? = null
+
+        if (worstFile != null) {
+            val report = analyses[worstFile.fileName]
+            if (report != null) {
+                val solution =
+                    llmSolutionGenerator.generateDebugSolution(
+                        worstFile,
+                        report
+                    )
+                aiText = solution.generatedSolution
+            }
+        }
+
+        android.util.Log.d("AI_DEBUGGER", "Worst File: ${projectInsights.worstFile}")
+        android.util.Log.d("AI_DEBUGGER", "Health Score: ${projectInsights.healthScore}")
+        android.util.Log.d("AI_DEBUGGER", "Summary: ${projectInsights.summary}")
+
+        // ⭐ NEW — AUTO LLM DIAGNOSIS
+        val aiMap = mutableMapOf<String, String>()
+
+        files.forEach { file ->
+
+            val report = analyses[file.fileName]
+            if (report != null) {
+
+                val solution = llmGenerator.generateDebugSolution(
+                    file,
+                    report
+                )
+
+                aiMap[file.fileName] = solution.generatedSolution
+            }
+        }
+
+        _state.update {
+            it.copy(
+                phase = DebugPhase.Complete,
+                qualityReports = qualities,
+                aiDiagnosis = aiText   // ⭐ ADD THIS
+            )
+        }
     }
 
     fun selectFile(index: Int) { _state.update { it.copy(selectedFileIndex = index) } }
@@ -353,5 +333,108 @@ Errors: $errorSummary
 Question: $userQuestion
 Answer:"""
     }
+
+    fun processImageBitmap(bitmap: Bitmap, modelService: ModelService) {
+
+        _state.update { it.copy(phase = DebugPhase.AnalyzingCode) }
+
+        viewModelScope.launch {
+
+            _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
+
+            val result = visionService.extractCodeFromImage(bitmap)
+            if (!result.isCode || result.extractedCode == null) {
+
+                _state.update {
+                    it.copy(
+                        phase = DebugPhase.Error(result.message)
+                    )
+                }
+                return@launch
+            }
+
+            val raw = result.extractedCode ?: ""
+
+            val normalized = raw.trim()
+
+            val codeFile = CodeFile(
+                fileName = "image_code.java",
+                language = SupportedLanguage.JAVA,   // ⭐ temporary default
+                rawContent = raw,
+                normalizedContent = normalized,
+                lineCount = normalized.lines().size
+            )
+            pendingImageFiles = listOf(codeFile)
+            pendingModelService = modelService
+
+            _state.update {
+                it.copy(
+                    extractedPreview = raw.take(800)
+                )
+            }
+        }
+
+    }
+
+    fun processImageUri(
+        context: Context,
+        uri: Uri,
+        modelService: ModelService
+    ) {
+        viewModelScope.launch {
+
+            _state.update { it.copy(phase = DebugPhase.ProcessingInput) }
+
+            try {
+                val bitmap =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        ImageDecoder.decodeBitmap(
+                            ImageDecoder.createSource(
+                                context.contentResolver,
+                                uri
+                            )
+                        )
+                    } else {
+                        MediaStore.Images.Media.getBitmap(
+                            context.contentResolver,
+                            uri
+                        )
+                    }
+
+                // ⭐ NOW CALL VLM PIPELINE
+                processImageBitmap(bitmap, modelService)
+
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        phase = DebugPhase.Error(
+                            "Failed to read image: ${e.message}"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmImageCode() {
+        val files = pendingImageFiles ?: return
+        val model = pendingModelService ?: return
+
+        viewModelScope.launch {
+            runAnalysis(files, model)
+        }
+
+        pendingImageFiles = null
+        pendingModelService = null
+
+        _state.update { it.copy(extractedPreview = null) }
+    }
+
+    fun cancelImageCode() {
+        pendingImageFiles = null
+        pendingModelService = null
+        _state.update { it.copy(extractedPreview = null) }
+    }
+
 }
 

@@ -148,7 +148,6 @@ class ModelService : ViewModel() {
             refreshModelState()
         }
     }
-    
     /**
      * Refresh model loaded states from SDK
      */
@@ -296,6 +295,7 @@ class ModelService : ViewModel() {
      * Download and load VLM model (SmolVLM 256M - multimodal with mmproj)
      */
     fun downloadAndLoadVLM() {
+
         if (isVLMDownloading || isVLMLoading) return
         
         viewModelScope.launch {
@@ -331,6 +331,8 @@ class ModelService : ViewModel() {
                 isVLMLoading = false
             }
         }
+
+
     }
     
     /**
